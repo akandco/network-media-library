@@ -19,7 +19,7 @@
  * Description: Network Media Library provides a central media library that's shared across all sites on the Multisite network.
  * Network:     true
  * Plugin URI:  https://github.com/humanmade/network-media-library
- * Version:     1.5.0
+ * Version:     1.5.4
  * Author:      John Blackbourn, Dominik Schilling, Frank Bültge
  * Author URI:  https://github.com/humanmade/network-media-library/graphs/contributors
  * License:     MIT
@@ -137,6 +137,17 @@ function admin_post_thumbnail_html( string $content, $post_id, $thumbnail_id ) :
 
 	switch_to_blog( get_site_id() );
 	$switched = true;
+
+    $post_type_check = get_post_type($thumbnail_id);
+    if($post_type_check !== 'attachment'){
+        $switched = false;
+        restore_current_blog();
+
+        update_post_meta($post_id, '_thumbnail_id', null);
+
+        return $content;
+    }
+
 	// $thumbnail_id is passed instead of post_id to avoid warning messages of nonexistent post object.
 	$content  = _wp_post_thumbnail_html( $thumbnail_id, $thumbnail_id );
 	$switched = false;
@@ -392,11 +403,11 @@ function make_content_images_responsive( $content ) {
 		return $content;
 	}
 
-	switch_to_media_site();
+	/*switch_to_media_site();
 
 	$content = wp_make_content_images_responsive( $content );
 
-	restore_current_blog();
+	restore_current_blog();*/
 
 	return $content;
 }
@@ -414,7 +425,7 @@ class ACF_Value_Filter {
 	 *
 	 * @var mixed Field value.
 	 */
-	protected $value = null;
+    protected $value = [];
 
 	/**
 	 * Sets up the necessary action and filter callbacks.
@@ -432,7 +443,7 @@ class ACF_Value_Filter {
 	}
 
 	/**
-	 * Fiters the return value when using field retrieval functions in Advanced Custom Fields.
+	 * Filters the return value when using field retrieval functions in Advanced Custom Fields.
 	 *
 	 * @param mixed      $value   The field value.
 	 * @param int|string $post_id The post ID for this value.
@@ -455,15 +466,26 @@ class ACF_Value_Filter {
 			}
 
 			restore_current_blog();
-		}
 
-		$this->value = $image;
+		} else if ( ! is_admin() ) {
+
+            switch ( $field['return_format'] ) {
+                case 'url':
+                    $image = wp_get_attachment_url( $value );
+                    break;
+                case 'array':
+                    $image = acf_get_attachment( $value );
+                    break;
+            }
+        }
+
+        $this->value[ $field['name'] ] = $image;
 
 		return $image;
 	}
 
 	/**
-	 * Fiters the optionally formatted value when using field retrieval functions in Advanced Custom Fields.
+	 * Filters the optionally formatted value when using field retrieval functions in Advanced Custom Fields.
 	 *
 	 * @param mixed      $value   The field value.
 	 * @param int|string $post_id The post ID for this value.
@@ -471,7 +493,7 @@ class ACF_Value_Filter {
 	 * @return mixed The updated value.
 	 */
 	public function filter_acf_attachment_format_value( $value, $post_id, array $field ) {
-		return $this->value;
+        return $this->value[ $field['name'] ];
 	}
 }
 
@@ -576,3 +598,56 @@ class Post_Thumbnail_Saver {
 }
 
 new Post_Thumbnail_Saver();
+
+/**
+ * A class which handles saving the post's featured image ID when submitted from a REST request.
+ *
+ * This handling is needed because adding a featured image from the Gutenberg editor fires off
+ * a REST request to `/wp-json/wp/v2/posts/<id>`, with a request payload containing `featured_media`
+ * with the ID of the featured image. A call to `set_post_thumbnail()` validates that the featured
+ * image post ID exists, and if the post ID does not exist, `handle_featured_media` returns a WP_Error
+ * with a code of `rest_invalid_featured_media`.
+ *
+ * There is a chance that the fetured image on the media site could have a post ID that is not a
+ * valid post ID on the site the featured image is being applied to (for example, a post has been
+ * deleted). After the post has been submitted via the REST request, the featured image is re-applied
+ * to ensure that it is saved with the post.
+ */
+class Post_Thumbnail_Saver_REST {
+
+    /**
+     * Sets up the necessary action callback if the post is being saved from a REST request.
+     */
+    public function __construct() {
+        if ( defined( 'REST_REQUEST' ) ) {
+            add_action( 'pre_post_update', [ $this, 'action_pre_post_update' ], 10, 2 );
+        }
+    }
+
+    /**
+     * Hooks into the correct action of `rest_insert_`, based on the post type being saved.
+     *
+     * @param int   $post_id Post ID.
+     * @param array $data    Array of unslashed post data.
+     */
+    public function action_pre_post_update( int $post_id, array $data ) {
+        add_action( 'rest_insert_' . get_post_type( $post_id ), [ $this, 'action_rest_insert' ], 10, 3 );
+    }
+
+    /**
+     * Re-saves the featured image ID for the given post.
+     *
+     * @param WP_Post         $post     Inserted or updated post object.
+     * @param WP_REST_Request $request  Request object.
+     * @param bool            $creating True when creating a post, false when updating.
+     */
+    public function action_rest_insert( $post, $request, bool $creating ) {
+        $request_json = $request->get_json_params();
+
+        if ( array_key_exists( 'featured_media', $request_json ) ) {
+            update_post_meta( $post->ID, '_thumbnail_id', $request_json[ 'featured_media' ] );
+        }
+    }
+}
+
+new Post_Thumbnail_Saver_REST();
