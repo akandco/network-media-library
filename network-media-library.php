@@ -608,7 +608,7 @@ new Post_Thumbnail_Saver();
  * image post ID exists, and if the post ID does not exist, `handle_featured_media` returns a WP_Error
  * with a code of `rest_invalid_featured_media`.
  *
- * There is a chance that the fetured image on the media site could have a post ID that is not a
+ * There is a chance that the featured image on the media site could have a post ID that is not a
  * valid post ID on the site the featured image is being applied to (for example, a post has been
  * deleted). After the post has been submitted via the REST request, the featured image is re-applied
  * to ensure that it is saved with the post.
@@ -619,9 +619,9 @@ class Post_Thumbnail_Saver_REST {
      * Sets up the necessary action callback if the post is being saved from a REST request.
      */
     public function __construct() {
-        if ( defined( 'REST_REQUEST' ) ) {
+        add_action( 'rest_api_init', function () {
             add_action( 'pre_post_update', [ $this, 'action_pre_post_update' ], 10, 2 );
-        }
+        });
     }
 
     /**
