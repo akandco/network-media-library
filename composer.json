@@ -24,7 +24,7 @@
   ],
   "require": {
     "php": ">=7",
-    "composer/installers": "^2.0",
+    "composer/installers": "^2.0"
   },
   "require-dev": {
     "automattic/phpcs-neutron-standard": "^1.5",
