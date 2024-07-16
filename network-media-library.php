@@ -211,23 +211,10 @@ add_filter( 'wp_get_attachment_image_src', function( $image, $attachment_id, $si
  * @param int    $attachment_id Image attachment ID or 0.
  */
 add_filter( 'wp_calculate_image_srcset', function( $sources, $size_array, $image_src, $image_meta, $attachment_id ) {
-	static $switched = false;
 
-	if ( $switched ) {
-		return $sources;
-	}
-
-	if ( is_media_site() ) {
-		return $$sources;
-	}
-
-	switch_to_media_site();
-
-	$switched = true;
-	$sources    = wp_calculate_image_srcset( $size_array, $image_src, $image_meta, $attachment_id  );
-	$switched = false;
-
-	restore_current_blog();
+    foreach($sources as $key => $source){
+        $sources[$key]['url'] = preg_replace('/sites\/\d+\//', '', $source['url']);
+    }
 
 	return $sources;
 }, 999, 5 );
