@@ -202,6 +202,24 @@ add_filter( 'wp_get_attachment_image_src', function( $image, $attachment_id, $si
 }, 999, 4 );
 
 /**
+ * Filters an image's 'srcset' sources.
+ *
+ * @param array  $sources One or more arrays of source data to include in the 'srcset'.
+ * @param array $size_array An array of requested width and height values.
+ * @param string $image_src     The 'src' of the image.
+ * @param array  $image_meta    The image meta data as returned by 'wp_get_attachment_metadata()'.
+ * @param int    $attachment_id Image attachment ID or 0.
+ */
+add_filter( 'wp_calculate_image_srcset', function( $sources, $size_array, $image_src, $image_meta, $attachment_id ) {
+
+    foreach($sources as $key => $source){
+        $sources[$key]['url'] = preg_replace('/sites\/\d+\//', '', $source['url']);
+    }
+
+	return $sources;
+}, 999, 5 );
+
+/**
  * Filters the default gallery shortcode output so it shows media from the network media library site.
  *
  * @param string $output   The gallery output.
@@ -497,7 +515,10 @@ class ACF_Value_Filter {
 	 * @return mixed The updated value.
 	 */
 	public function filter_acf_attachment_format_value( $value, $post_id, array $field ) {
-        return $this->value[ $field['name'] ];
+        if(isset($this->value[ $field['name'] ])){
+            return $this->value[ $field['name'] ];
+        }
+        return $value;
 	}
 }
 
